@@ -1,6 +1,7 @@
 const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
+const moment = require('moment');
 const { User, Exercise } = require('./models/User.js');
 
 const cors = require('cors');
@@ -52,6 +53,7 @@ app.post('/api/exercise/add', (request, response, next) => {
         return queriedUser.save();
       })
       .then(user => {
+        exerciseEntered.date = moment(exerciseEntered.date).utc().format('MMMM Do YYYY, dddd');
         response.json({
           _id: user._id, 
           username: user.username, 
@@ -72,8 +74,31 @@ app.get('/api/exercise/users', (request, response, next) => {
   .catch(error => next({status: error.status, message: error.message}));
 });
 
+function exerciseLogOptionalQueries(exercises, from, to, limit){
+  let filteredExercises = exercises.filter((exercise) => {
+    exercise.date = moment(exercise.date).utc();
+    let isWithinDateRange = true;
+    if(from && exercise.date < from){
+      isWithinDateRange = false;
+    }
+    if(to && exercise.date > to){
+      isWithinDateRange = false;
+    }
+    return isWithinDateRange;
+  });
+
+  if(limit){
+    filteredExercises = exercises.slice(0, limit);
+  }
+  return filteredExercises;
+};
+
 app.get('/api/exercise/log', (request, response, next) => {
   const userId = request.query.userId;
+  const from = request.query.from && new Date(request.query.from);
+  const to = request.query.to && new Date(request.query.to);
+  const limit = request.query.limit;
+
   User.findById({_id: userId}).select('-v').populate('exercises')
       .then(queriedUser => {
         if(!queriedUser){
@@ -81,15 +106,19 @@ app.get('/api/exercise/log', (request, response, next) => {
         } else if(!queriedUser.exercises.length){
           return Promise.reject({status: 400, message: 'No exercises found'});
         }
+
+        let exercises = exerciseLogOptionalQueries(queriedUser.exercises, from, to, limit);
+
         response.json({
           _id: queriedUser._id, 
-          username: queriedUser.username, 
-          exercises: queriedUser.exercises.map(exercise => ({
+          username: queriedUser.username,
+          count: queriedUser.exercises.length,
+          log: exercises.map(exercise => ({
             duration: exercise.duration,
             description: exercise.description,
-            date: exercise.date
+            date: moment(exercise.date).utc().format('MMMM Do YYYY, dddd')
           })), 
-          count: queriedUser.exercises.length});
+        });
       })
       .catch(error => next({status: error.status, message: error.message}));
 });
@@ -99,20 +128,19 @@ app.use((req, res, next) => {
 });
 
 // Error Handling middleware
-app.use((err, req, res, next) => {
-  let errCode, errMessage
-
-  if (err.errors) {
+app.use((error, request, response, next) => {
+  let errorCode, errorMessage
+  if (error.errors) {
     // mongoose validation error
-    errCode = 400 // bad request
-    const keys = Object.keys(err.errors)
+    errorCode = 400 // bad request
+    const keys = Object.keys(error.errors)
     // report the first validation error
     errMessage = err.errors[keys[0]].message
   } else {
     // generic or custom error
-    errCode = err.status || 500;
-    errMessage = err.message || 'Internal Server Error'
+    errorCode = error.status || 500;
+    errorMessage = error.message || 'Internal Server Error'
   }
-  res.status(errCode).type('txt')
-     .send(errMessage)
+  response.status(errorCode).type('txt')
+          .send(errorMessage)
 });
