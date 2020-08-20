@@ -47,7 +47,7 @@ app.post('/api/exercise/add', (request, response, next) => {
         if(!queriedUser){
           return Promise.reject({status: 400, message: 'User does not exist'});
         }
-        const exercise = new Exercise({user: queriedUser, ...exerciseEntered});
+        const exercise = new Exercise(Object.assign({user: queriedUser}, exerciseEntered));
         exercise.save();
         queriedUser.exercises.push(exercise);
         return queriedUser.save();
