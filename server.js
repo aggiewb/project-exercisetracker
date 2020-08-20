@@ -38,7 +38,7 @@ app.post('/api/exercise/new-user', (request, response, next) => {
 
 app.post('/api/exercise/add', (request, response, next) => {
   const requestBody = request.body;
-  const duration = requestBody.duration;
+  const duration = parseInt(requestBody.duration);
   const description = requestBody.description;
   const date = requestBody.date ? new Date(requestBody.date) : new Date();
   const exerciseEntered = {duration, description, date};
@@ -53,11 +53,12 @@ app.post('/api/exercise/add', (request, response, next) => {
         return queriedUser.save();
       })
       .then(user => {
-        exerciseEntered.date = moment(exerciseEntered.date).utc().format('MMMM Do YYYY, dddd');
         response.json({
           _id: user._id, 
           username: user.username, 
-          exercise: exerciseEntered
+          date: date.toDateString(),
+          duration,
+          description
         });
       })
       .catch(error => next({status: error.status, message: error.message}));
